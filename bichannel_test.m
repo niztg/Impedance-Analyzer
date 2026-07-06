@@ -24,8 +24,6 @@ end
 
 for k = 1:n_tests
     Z = Z_true(k);
-    phase_shift = angle(Z / (Z + R_ref));
-    amplitude   = abs(Z / (Z + R_ref));
 
     V_in = 1;
     H = Z / (Z + R_ref);          % complex voltage divider, no separation needed

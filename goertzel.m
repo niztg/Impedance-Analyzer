@@ -1,0 +1,27 @@
+fs = 8000; % sampling frequency of the ADC
+f0 = 1000; % frequency of generated stimulus
+N  = 8000; % amount of samples taken per frequency
+t  = (0:N-1)' / fs; % sampling duration per input stimulus
+
+true_mag   = 0.7;
+true_phase = 0.4;
+x = true_mag * cos(2*pi*f0*t + true_phase) + 0.2*randn(N,1); % generates a cosine wave with a given magnitude and phase shift and adds a random noise term
+
+omega        = 2*pi*f0/fs; 
+coeff        = 2*cos(omega);
+phase_factor = exp(-1j*omega);
+
+% initialize w[-1] = w[-2] = 0
+w1 = 0;
+w2 = 0;
+for n = 1:N % the front term of the Goertzel sequence w[n] accumulates N samples for each frequency
+    w0 = x(n) + coeff*w1 - w2;
+    w2 = w1;
+    w1 = w0;
+end
+
+X = w1 - phase_factor*w2;
+X_normalized = conj(X) / (N/2);
+
+fprintf('true magnitude: %.4f  recovered: %.4f\n', true_mag, abs(X_normalized));
+fprintf('true phase:     %.2f  recovered: %.2f degrees\n', true_phase*180/pi, angle(X_normalized)*180/pi);

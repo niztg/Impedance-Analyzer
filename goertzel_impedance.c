@@ -19,13 +19,12 @@
 
 
 #define SAMPLE_RATE_HZ   44100.0
-#define N_SAMPLES        2048
 #define R_REF_OHMS       1000.0
 
-/* Frequency sweep: logarithmically spaced, 10 Hz – 20 kHz */
 #define F_START_HZ       10.0
 #define F_STOP_HZ        20000.0
 #define N_FREQS          50
+#define CYCLES_PER_BIN   10     /* coherent sampling: N = CYCLES_PER_BIN * fs/f */
 
 
 // Computes Goertzel algorithm on given array of samples (DT signal) x
@@ -41,8 +40,7 @@ static double complex goertzel(const double *x, int N, double omega)
         w1 = w0;
     }
 
-    /* At loop exit: w1 = w[N-1], w2 = w[N-2] */
-    double complex ejw = cos(omega) - I * sin(omega);   /* e^{−jω} */
+    double complex ejw = cos(omega) - I * sin(omega);
     return w1 - ejw * w2;
 }
 
@@ -95,23 +93,20 @@ int main(void)
     const double R_s = 470.0;
     const double C   = 1e-6;
     const double fs  = SAMPLE_RATE_HZ;
-    const int    N   = N_SAMPLES;
 
     double freqs[N_FREQS];
     logspace(F_START_HZ, F_STOP_HZ, N_FREQS, freqs);
-
-    double *ch_ref = malloc(N * sizeof(double));
-    double *ch_dut = malloc(N * sizeof(double));
-    if (!ch_ref || !ch_dut) {
-        fprintf(stderr, "malloc failed\n");
-        return 1;
-    }
 
     printf("f_hz,Z_mag_meas,Z_phase_deg_meas,Z_mag_true,Z_phase_deg_true\n");
 
     for (int i = 0; i < N_FREQS; i++) {
         double f     = freqs[i];
+        int    N     = (int)round(CYCLES_PER_BIN * fs / f); /* coherent N per bin */
         double omega = 2.0 * M_PI * f / fs;
+
+        double *ch_ref = malloc(N * sizeof(double));
+        double *ch_dut = malloc(N * sizeof(double));
+        if (!ch_ref || !ch_dut) { fprintf(stderr, "malloc failed\n"); return 1; }
 
         sim_series_RC(f, R_s, C, R_REF_OHMS, fs, N, ch_ref, ch_dut);
 
@@ -122,9 +117,10 @@ int main(void)
                f,
                cabs(Z_meas),  carg(Z_meas) * 180.0 / M_PI,
                cabs(Z_true),  carg(Z_true) * 180.0 / M_PI);
+
+        free(ch_ref);
+        free(ch_dut);
     }
 
-    free(ch_ref);
-    free(ch_dut);
     return 0;
 }

@@ -40,3 +40,65 @@ void hw_read_channels(int N, double fs, double f_hz, double *ch_ref, double *ch_
 }
 
 #else
+
+#define JP1_BASE                0xFF200060
+
+// pin definitions
+#define PIN_SCLK    0 // universal clock
+#define PIN_MOSI    1 // Master Out, Slave In: for the FPGA to send a command or frequency word to the AD9833
+#define PIN_MISO    2 // Master In, Slave Out: for the MCP3202 to send data back to the FPGA
+#define PIN_CS_DAC  3   // active low enable for the AD9833
+#define PIN_CS_ADC  4   // active low enable for the MCP3202
+
+#define AD9833_MCLK_HZ  25000000.0
+
+static volatile int *jp1_ptr = (volatile int *)JP1_BASE;
+static volatile int *jp1_dir_ptr = (volatile int *)(JP1_BASE + 4); 
+
+static void gpio_set(int pin, int val){
+    if (val) *jp1_ptr |=  (1 << pin); // assert bit at `pin` while leaving all other bits identical
+    else     *jp1_ptr &= ~(1 << pin); // lower bit at `pin` while leaving all other bits identical
+}
+
+static int gpio_get(int pin){
+    return (*jp1_ptr >> pin) & 1; // return the value of the bit at `pin`
+}
+
+static void spi_delay(void){
+    struct timespec ts = {0, 100};
+    nanosleep(&ts, NULL);
+}
+
+/*
+AD9833 functions
+*/
+
+// Template to write a value into the AD9833
+static void ad9833_write(uint16_t word){
+    gpio_set(PIN_CS_DAC, 0);
+    for (int i = 0; i < 15; i++){ // bit-banging: toggling one bit per iteration
+        gpio_set(PIN_SCLK, 0);
+        gpio_set(PIN_MOSI, (word >> i) & 1); // to the AD9833: send the i-th bit of the word argument
+        spi_delay();
+        gpio_set(PIN_SCLK, 1);
+        spi_delay();
+    }
+    gpio_set(PIN_SCLK, 0);
+    gpio_set(PIN_CS_DAC, 1);
+}
+
+void hw_set_freq(double f_hz){
+    uint32_t freq_word = (uint32_t)round(f_hz * (1 << 28) / AD9833_MCLK_HZ); // freq_word = f_hz * 2^28 / f_MCLK
+
+    // in both lsb and msb, bit 14 must be set high
+    uint16_t lsb = (uint16_t)( freq_word        & 0x3FFF) | 0x4000; // bottom 14 bits of freq_word
+    uint16_t msb = (uint16_t)((freq_word >> 14)  & 0x3FFF) | 0x4000; // top 14 bits of freq_word
+
+    ad9833_write_reg(0x2100); // sets bit 13 (enables a 28 bit address to be written in two consecutive writes) and bit 8 (steadies the AD9833 inbetween these writes)
+    ad9833_write_reg(lsb);
+    ad9833_write_reg(msb);
+
+    struct timespec ts = {0, (long)(1e9 / f_hz)};
+    nanosleep(&ts, NULL);
+}
+

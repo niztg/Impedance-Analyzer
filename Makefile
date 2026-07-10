@@ -1,8 +1,8 @@
 INSTALL := C:/intelFPGA/QUARTUS_Lite_V23.1
 
 MAIN := main.c
-HDRS := address_map.h model/model1.h fft_helper/kiss_fft.h fft_helper/kiss_fft_guts.h fft_helper/kiss_fft_log.h fft_helper/kiss_fftr.h helper/data_processing.h helper/signal_analysis.h helper/vga.h
-SRCS := main.c model/model1.c fft_helper/kiss_fft.c fft_helper/kiss_fftr.c helper/data_processing.c helper/signal_analysis.c helper/vga.c
+HDRS := hw.h
+SRCS := main.c hw.c
 
 SHELL := cmd.exe
 
@@ -37,7 +37,7 @@ NM := $(COMPILER)/riscv32-unknown-elf-nm.exe
 RM := /usr/bin/rm -f
 
 # Flags
-USERCCFLAGS := -g -O1 -ffunction-sections -fverbose-asm -fno-inline -gdwarf-2 -DKISS_FFT_API=
+USERCCFLAGS := -g -O1 -ffunction-sections -fverbose-asm -fno-inline -gdwarf-2
 USERLDFLAGS := -Wl,--defsym=__stack_pointer$$=0x4000000 -Wl,--defsym=JTAG_UART_BASE=0xff201000
 ARCHCCFLAGS := -march=rv32im_zicsr -mabi=ilp32
 ARCHLDFLAGS := -march=rv32im_zicsr -mabi=ilp32

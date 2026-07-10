@@ -3,7 +3,7 @@
  *
  * Swept-frequency impedance analyzer — Goertzel core + VGA Bode display.
  * DE1-SoC HPS. Compile with -DSIM_MODE to run without hardware.
- * 
+ *
  * VGA primitives borrowed from FPGA Signal Classifier Project
  * https://github.com/niztg/FPGA-Signal-Classifier/tree/main
  */
@@ -17,23 +17,20 @@
 #include <stdbool.h>
 #include "hw.h"
 
-// VGA memory map
 #define PIXEL_BUF_CTRL   0xFF203020
 #define CHAR_BUF_CTRL    0xFF203030
 
 volatile int        pixel_buffer_start;
-volatile int       *pixel_ctrl_ptr          = (volatile int *)PIXEL_BUF_CTRL;
+volatile int       *pixel_ctrl_ptr     = (volatile int *)PIXEL_BUF_CTRL;
 volatile char      *character_buffer_start;
-volatile int       *character_ctrl_ptr      = (volatile int *)CHAR_BUF_CTRL;
+volatile int       *character_ctrl_ptr = (volatile int *)CHAR_BUF_CTRL;
 
-// Colors
 #define BACKGROUND_COLOR  0x0000
 #define LINE_COLOR        0xFFFF
 #define COLOR_MAG         0x07E0
 #define COLOR_PHASE       0xF81F
 #define COLOR_GRID        0x2104
 
-// Sweep parameters
 #define SAMPLE_RATE_HZ   44100.0
 #define R_REF_OHMS       1000.0
 #define F_START_HZ       10.0
@@ -41,7 +38,6 @@ volatile int       *character_ctrl_ptr      = (volatile int *)CHAR_BUF_CTRL;
 #define N_FREQS          50
 #define CYCLES_PER_BIN   10
 
-// VGA layout
 #define LEFT_MARGIN   48
 #define RIGHT_MARGIN   8
 #define TOP_MARGIN     8
@@ -55,18 +51,14 @@ static const int MAG_TL_Y   = TOP_MARGIN;
 static const int PHASE_TL_X = LEFT_MARGIN;
 static const int PHASE_TL_Y = TOP_MARGIN + PANEL_H + SEPARATOR;
 
-// Encoder pin layout
 #define ENC0_BASE_BIT  27
 #define ENC1_BASE_BIT  17
 
-// Bode axis state
 static double g_f_min, g_f_max, g_z_min, g_z_max;
 
-// Sweep state
 typedef enum { STATE_IDLE, STATE_SWEEPING, STATE_DONE } AppState;
 static AppState app_state = STATE_IDLE;
 
-// VGA primitives
 typedef struct { int x; int y; } point;
 
 static void vga_text(int x, int y, char *text_ptr) {
@@ -93,8 +85,8 @@ static void swap2Points(point *a, point *b) {
 static void drawLine(point p0, point p1, short int color, bool dotted) {
     bool steep = abs(p1.y - p0.y) > abs(p1.x - p0.x);
     int dash = 4;
-    if (steep)        { swapXY(&p0); swapXY(&p1); }
-    if (p0.x > p1.x)   swap2Points(&p0, &p1);
+    if (steep)       { swapXY(&p0); swapXY(&p1); }
+    if (p0.x > p1.x)  swap2Points(&p0, &p1);
     int dx = p1.x - p0.x, dy = abs(p1.y - p0.y);
     int err = -dx / 2, y = p0.y, ystep = (p1.y > p0.y) ? 1 : -1;
     for (int x = p0.x; x <= p1.x; x++) {
@@ -117,15 +109,13 @@ static void clearRegion(point tl, int w, int h) {
 }
 
 static void drawGraphBoundingBox(point tl, int gh, int gw) {
-    point tr = {tl.x + gw, tl.y},      bl = {tl.x,      tl.y + gh},
-          br = {tl.x + gw, tl.y + gh};
+    point tr = {tl.x + gw, tl.y}, bl = {tl.x, tl.y + gh}, br = {tl.x + gw, tl.y + gh};
     drawLine(tl, tr, LINE_COLOR, false);
     drawLine(tl, bl, LINE_COLOR, false);
     drawLine(br, tr, LINE_COLOR, false);
     drawLine(br, bl, LINE_COLOR, false);
 }
 
-// Coordinate transforms
 static int freq_to_x(double f) {
     double t = log(f / g_f_min) / log(g_f_max / g_f_min);
     if (t < 0.0) t = 0.0; if (t > 1.0) t = 1.0;
@@ -144,15 +134,12 @@ static int phase_to_y(double deg) {
     return PHASE_TL_Y + PANEL_H - 1 - (int)(t * (PANEL_H - 2));
 }
 
-// Bode axis drawing
 static void draw_log_freq_axis(void) {
     static const double sub[3] = { 1.0, 2.0, 5.0 };
     int bot_mag   = MAG_TL_Y   + PANEL_H - 1;
     int bot_phase = PHASE_TL_Y + PANEL_H - 1;
-
     double decade = pow(10.0, floor(log10(g_f_min)));
     while (decade * 10.0 < g_f_min) decade *= 10.0;
-
     for (; decade <= g_f_max * 1.01; decade *= 10.0) {
         for (int s = 0; s < 3; s++) {
             double f = decade * sub[s];
@@ -170,8 +157,7 @@ static void draw_log_freq_axis(void) {
                 snprintf(label, sizeof(label),
                          f >= 1000.0 ? "%.0fk" : "%.0f",
                          f >= 1000.0 ? f / 1000.0 : f);
-                vga_text(x / 4 - (int)strlen(label) / 2,
-                         (bot_phase + 10) / 4, label);
+                vga_text(x / 4 - (int)strlen(label) / 2, (bot_phase + 10) / 4, label);
             }
         }
     }
@@ -212,7 +198,7 @@ static void draw_phase_axis(void) {
     vga_text(0, (PHASE_TL_Y + PANEL_H / 2) / 4, "deg");
 }
 
-static void draw_status(const char *msg) {  /* top-right corner */
+static void draw_status(const char *msg) {
     vga_text((LEFT_MARGIN + PANEL_W - 40) / 4, 0, (char *)msg);
 }
 
@@ -222,8 +208,8 @@ static void bode_init(double z_min, double z_max, double f_min, double f_max) {
     clearRegion((point){0, 0}, 640, 480);
     drawGraphBoundingBox((point){MAG_TL_X,   MAG_TL_Y},   PANEL_H, PANEL_W);
     drawGraphBoundingBox((point){PHASE_TL_X, PHASE_TL_Y}, PANEL_H, PANEL_W);
-    vga_text(LEFT_MARGIN / 4, TOP_MARGIN / 4,   "Impedance magnitude");
-    vga_text(LEFT_MARGIN / 4, PHASE_TL_Y / 4,   "Phase");
+    vga_text(LEFT_MARGIN / 4, TOP_MARGIN / 4, "Impedance magnitude");
+    vga_text(LEFT_MARGIN / 4, PHASE_TL_Y / 4, "Phase");
     draw_log_freq_axis();
     draw_log_zmag_axis();
     draw_phase_axis();
@@ -235,7 +221,6 @@ static void bode_plot_point(double f, double z_mag, double z_phase_deg) {
     plotPixel((point){freq_to_x(f), phase_to_y(z_phase_deg)}, COLOR_PHASE);
 }
 
-// Encoder polling  (reads JP1 via hw.c to avoid pointer aliasing)
 static int poll_encoder(int base_bit, int idx) {
     static int prev_clk[2] = {1, 1};
     int jp1 = hw_read_jp1();
@@ -255,7 +240,6 @@ static int poll_encoder_button(int base_bit, int idx) {
     return pressed;
 }
 
-// Goertzel / impedance
 static double complex goertzel(const double *x, int N, double omega) {
     double coeff = 2.0 * cos(omega), w0 = 0.0, w1 = 0.0, w2 = 0.0;
     for (int n = 0; n < N; n++) { w0 = x[n] + coeff * w1 - w2; w2 = w1; w1 = w0; }
@@ -264,7 +248,7 @@ static double complex goertzel(const double *x, int N, double omega) {
 }
 
 static double complex calc_impedance(const double *ch_dut, const double *ch_ref,
-                                      int N, double omega, double r_ref) {
+                                     int N, double omega, double r_ref) {
     return (goertzel(ch_dut, N, omega) / goertzel(ch_ref, N, omega)) * r_ref;
 }
 
@@ -274,13 +258,85 @@ static void logspace(double f0, double f1, int n, double *out) {
         out[i] = pow(10.0, lf0 + (lf1 - lf0) * i / (n - 1));
 }
 
-// Sweep
+typedef struct { double f; double z_mag; double z_phase_deg; } BinResult;
+
+static void fmt_si(char *buf, size_t len, double val, const char *unit) {
+    const char *prefixes[] = { "m", "", "k", "M" };
+    double scales[]        = { 1e-3, 1.0, 1e3, 1e6 };
+    int idx = 1;
+    if      (val >= 1e6) idx = 3;
+    else if (val >= 1e3) idx = 2;
+    else if (val <  1.0) idx = 0;
+    snprintf(buf, len, "%.3g%s%s", val / scales[idx], prefixes[idx], unit);
+}
+
+static void extract_and_display(const BinResult *res, int n) {
+    double phase_sum = 0.0;
+    for (int i = 0; i < n; i++) phase_sum += res[i].z_phase_deg;
+    double mean_phase = phase_sum / n;
+
+    typedef enum { MODEL_RC, MODEL_RL, MODEL_R } Model;
+    Model model = (mean_phase < -10.0) ? MODEL_RC :
+                  (mean_phase >  10.0) ? MODEL_RL : MODEL_R;
+
+    int lo = 0, hi = n;
+    if      (model == MODEL_RC) lo = (3 * n) / 4;
+    else if (model == MODEL_RL) hi = n / 4;
+    double r_sum = 0.0;
+    for (int i = lo; i < hi; i++) r_sum += res[i].z_mag;
+    double R = r_sum / (hi - lo);
+
+    double target_phase = (model == MODEL_RL) ? 45.0 : -45.0;
+    double f_c = 0.0;
+    for (int i = 1; i < n; i++) {
+        double p0 = res[i-1].z_phase_deg, p1 = res[i].z_phase_deg;
+        if ((p0 - target_phase) * (p1 - target_phase) <= 0.0) {
+            double t = (target_phase - p0) / (p1 - p0);
+            f_c = res[i-1].f + t * (res[i].f - res[i-1].f);
+            break;
+        }
+    }
+
+    double C = 0.0, L = 0.0;
+    if (f_c > 0.0) {
+        if (model == MODEL_RC) C = 1.0 / (2.0 * M_PI * R * f_c);
+        if (model == MODEL_RL) L = R  / (2.0 * M_PI * f_c);
+    }
+
+    char r_buf[16], c_buf[16], l_buf[16], fc_buf[16];
+    fmt_si(r_buf,  sizeof(r_buf),  R,   "Ohm");
+    fmt_si(fc_buf, sizeof(fc_buf), f_c, "Hz");
+
+    int strip_y = PHASE_TL_Y + PANEL_H + 2;
+    clearRegion((point){0, strip_y}, 640, 480 - strip_y);
+
+    char line[80];
+    switch (model) {
+        case MODEL_RC:
+            fmt_si(c_buf, sizeof(c_buf), C, "F");
+            snprintf(line, sizeof(line), "Model: Series RC    R: %s    C: %s    fc: %s",
+                     r_buf, c_buf, fc_buf);
+            break;
+        case MODEL_RL:
+            fmt_si(l_buf, sizeof(l_buf), L, "H");
+            snprintf(line, sizeof(line), "Model: Series RL    R: %s    L: %s    fc: %s",
+                     r_buf, l_buf, fc_buf);
+            break;
+        case MODEL_R:
+            snprintf(line, sizeof(line), "Model: Resistive    R: %s", r_buf);
+            break;
+    }
+    vga_text(LEFT_MARGIN / 4, strip_y / 4, line);
+}
+
 static void run_sweep(void) {
     bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ);
     draw_status("Sweeping...     ");
 
     double freqs[N_FREQS];
     logspace(F_START_HZ, F_STOP_HZ, N_FREQS, freqs);
+
+    BinResult results[N_FREQS];
 
     for (int i = 0; i < N_FREQS; i++) {
         double f     = freqs[i];
@@ -295,6 +351,7 @@ static void run_sweep(void) {
         hw_read_channels(N, SAMPLE_RATE_HZ, f, ch_ref, ch_dut);
 
         double complex Z = calc_impedance(ch_dut, ch_ref, N, omega, R_REF_OHMS);
+        results[i] = (BinResult){ f, cabs(Z), carg(Z) * 180.0 / M_PI };
         bode_plot_point(f, cabs(Z), carg(Z) * 180.0 / M_PI);
 
 #ifdef SIM_MODE
@@ -304,9 +361,9 @@ static void run_sweep(void) {
         free(ch_dut);
     }
 
-    draw_status("Done.");
+    extract_and_display(results, N_FREQS);
+    draw_status("Done.           ");
 }
-
 
 int main(void) {
     character_buffer_start = (volatile char *)(*character_ctrl_ptr);
@@ -314,7 +371,6 @@ int main(void) {
 
     hw_init();
 
-    // default axis ranges
     g_z_min = 1.0;
     g_z_max = 100000.0;
 
@@ -322,19 +378,16 @@ int main(void) {
     draw_status("Press enc0 to sweep");
 
     while (1) {
-        // encoder 0 press = begin sweep
         if (poll_encoder_button(ENC0_BASE_BIT, 0)) {
             app_state = STATE_SWEEPING;
             run_sweep();
             app_state = STATE_DONE;
         }
 
-        // turn encoder0 = scale Zmax by 1 decade
         int d0 = poll_encoder(ENC0_BASE_BIT, 0);
         if (d0 == 1  && g_z_max < 1e7) { g_z_max *= 10.0; bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ); }
         if (d0 == -1 && g_z_max > 1e2) { g_z_max /= 10.0; bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ); }
 
-        // turn encoder1 = scale Zmin by 1 decade
         int d1 = poll_encoder(ENC1_BASE_BIT, 1);
         if (d1 == 1  && g_z_min < g_z_max / 10.0) { g_z_min *= 10.0; bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ); }
         if (d1 == -1 && g_z_min > 1e-1)            { g_z_min /= 10.0; bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ); }

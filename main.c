@@ -126,7 +126,6 @@ static void drawGraphBoundingBox(point tl, int gh, int gw) {
 }
 
 // Coordinate transforms
-
 static int freq_to_x(double f) {
     double t = log(f / g_f_min) / log(g_f_max / g_f_min);
     if (t < 0.0) t = 0.0; if (t > 1.0) t = 1.0;
@@ -276,8 +275,6 @@ static void logspace(double f0, double f1, int n, double *out) {
 }
 
 // Sweep
-
-
 static void run_sweep(void) {
     bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ);
     draw_status("Sweeping...     ");
@@ -317,7 +314,7 @@ int main(void) {
 
     hw_init();
 
-    /* default axis ranges */
+    // default axis ranges
     g_z_min = 1.0;
     g_z_max = 100000.0;
 
@@ -325,19 +322,19 @@ int main(void) {
     draw_status("Press enc0 to sweep");
 
     while (1) {
-        /* encoder 0 press — trigger sweep */
+        // encoder 0 press = begin sweep
         if (poll_encoder_button(ENC0_BASE_BIT, 0)) {
             app_state = STATE_SWEEPING;
             run_sweep();
             app_state = STATE_DONE;
         }
 
-        /* encoder 0 turn — scale z_max by one decade */
+        // turn encoder0 = scale Zmax by 1 decade
         int d0 = poll_encoder(ENC0_BASE_BIT, 0);
         if (d0 == 1  && g_z_max < 1e7) { g_z_max *= 10.0; bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ); }
         if (d0 == -1 && g_z_max > 1e2) { g_z_max /= 10.0; bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ); }
 
-        /* encoder 1 turn — scale z_min by one decade */
+        // turn encoder1 = scale Zmin by 1 decade
         int d1 = poll_encoder(ENC1_BASE_BIT, 1);
         if (d1 == 1  && g_z_min < g_z_max / 10.0) { g_z_min *= 10.0; bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ); }
         if (d1 == -1 && g_z_min > 1e-1)            { g_z_min /= 10.0; bode_init(g_z_min, g_z_max, F_START_HZ, F_STOP_HZ); }

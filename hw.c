@@ -179,4 +179,6 @@ void hw_init(void){
 
 void hw_cleanup(void) { /* nothing to close */ }
 
+int hw_read_jp1(void) { return *jp1_ptr; }
+
 #endif

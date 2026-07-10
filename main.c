@@ -249,7 +249,9 @@ static double complex goertzel(const double *x, int N, double omega) {
 
 static double complex calc_impedance(const double *ch_dut, const double *ch_ref,
                                      int N, double omega, double r_ref) {
-    return (goertzel(ch_dut, N, omega) / goertzel(ch_ref, N, omega)) * r_ref;
+    double complex V_mid = goertzel(ch_dut, N, omega);  // ch0, middle node
+    double complex V_top = goertzel(ch_ref, N, omega);  // ch1, top node
+    return (V_mid / (V_top - V_mid)) * r_ref;
 }
 
 static void logspace(double f0, double f1, int n, double *out) {
